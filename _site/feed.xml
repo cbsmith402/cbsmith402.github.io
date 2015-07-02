@@ -1,0 +1,442 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>CB Smith dot org</title>
+    <description>Write an awesome description for your new site here. You can edit this line in _config.yml. It will appear in your document head meta (for Google search results) and in your feed.xml site description.
+</description>
+    <link>http://localhost:4000//</link>
+    <atom:link href="http://localhost:4000//feed.xml" rel="self" type="application/rss+xml"/>
+    <pubDate>Wed, 01 Jul 2015 22:30:33 -0400</pubDate>
+    <lastBuildDate>Wed, 01 Jul 2015 22:30:33 -0400</lastBuildDate>
+    <generator>Jekyll v2.5.3</generator>
+    
+      <item>
+        <title>Let&#39;s make an Auth0 clone with ASP.NET Identity</title>
+        <description>&lt;h2 id=&quot;the-problem&quot;&gt;The Problem&lt;/h2&gt;
+&lt;p&gt;What’s the least fun part of building an app, web or otherwise? For me, it’s always authentication. Registration screens, email confirmations, password hashing, OAuth voodoo… It’s a pain, and most of it is boilerplate, but there’s always enough small differences that I end up re-inventing the wheel with every project I do. I just want to get to the MEAT of the application, not write boring user management stuff!&lt;/p&gt;
+
+&lt;p&gt;Then I discovered Auth0. It seemed perfect: Just create an application in their dashboard, add a couple lines of code to your project and you can authenticate users! Awesome!&lt;/p&gt;
+
+&lt;p&gt;I want to say before I get into the rest of this that I absolutely love the concept of Auth0. Delegating authentication and possibly authorization to a vendor who knows what they’re doing seems like a good idea. They have a solid API, a beautiful widget that works both on the web and mobile, and scads of API and platform integrations. Their support is top-notch too. But they recently changed their pricing model and that made it less attractive for me. I strongly dislike tiered pricing and prefer pay-what-you-use models much more. That’s probably why I’m such a huge fan of Azure and Cloudant, but I digress.&lt;/p&gt;
+
+&lt;p&gt;So with Auth0’s pricing changes, as well as the fact that I don’t “own” the user data on my site, I got to thinking about alternatives. Without finding any decent ones, I thought “Am I not a DEVELOPER?!?” and decided to build my own.&lt;/p&gt;
+
+&lt;h2 id=&quot;enter-sheetrock&quot;&gt;Enter Sheetrock&lt;/h2&gt;
+&lt;p&gt;I’m going to call it Sheetrock because it was partially inspired by the wonderful Drywall starter kit for Node.js projects. Get it? Sheetrock, drywall… &lt;/p&gt;
+
+&lt;p&gt;Anyway.&lt;/p&gt;
+
+&lt;p&gt;Let’s talk about what this thing should do. It should handle logging in with both a username/password or social providers, email confirmation, password reset and a basic dashboard for viewing my users. Basically, all the stuff we need to do but hate doing. I’ll be blogging my progress with creating and improving it. My goal is to get to the same basic level of functionality as Auth0, albeit without some of the more esoteric login providers and “enterprise” scenarios. I just want to log in to a web app and a mobile app for now. I’d also like it to work with Azure Mobile Services, since that’s an awesome part of Azure. That means we need to generate the JWT tokens that AMS expects.&lt;/p&gt;
+
+&lt;h2 id=&quot;jwt&quot;&gt;JWT&lt;/h2&gt;
+&lt;p&gt;What’s a JWT?&lt;/p&gt;
+
+&lt;p&gt;Well, it stands for Javascript Web Token, and it’s my favorite replacement for cookies. It’s basically an encrypted JSON object with a specific structure. I could get into all the reasons why they’re awesome, but the Auth0 guys have already done that for me here: &lt;a href=&quot;https://auth0.com/blog/2014/01/27/ten-things-you-should-know-about-tokens-and-cookies/&quot;&gt;https://auth0.com/blog/2014/01/27/ten-things-you-should-know-about-tokens-and-cookies/&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;Another thing is that since all you need to decrypt a JWT is the master key, we can host the login service on a different domain and not have to worry about cookie domains and whatnot. In fact, for one mobile-only app I’m working on, I’ll put the login service on Azure and just host it at the https://blah.azurewebsites.net domain. Free SSL cert!&lt;/p&gt;
+
+&lt;p&gt;But this all sounds like a lot, and it is, but most of it has already been done for us!&lt;/p&gt;
+
+&lt;h2 id=&quot;aspnet-identity-to-the-rescue&quot;&gt;ASP.NET Identity to the rescue&lt;/h2&gt;
+&lt;p&gt;Thankfully, Microsoft has built most of the moving parts of these requirements into the various ASP.NET OWIN modules, namely the ASP.NET Identity ones. In fact, they’ve also created a template for a basic website that does login, user management AND role management. However, it’s only half the puzzle as it only handles cookie authentication, not JWTs. We can fix that pretty easily, though, as I’ll show you.&lt;/p&gt;
+
+&lt;p&gt;The first thing we’ll want to do is create an empty ASP.NET project in Visual Studio. And by empty I mean, COMPLETELY empty:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_Empty_AspNet.png&quot; alt=&quot;Empty ASP.NET Project&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;This is because this next Nuget package will essentially set up all the controllers, views and code for us and we don’t want anything getting in its way. That package would be the Microsoft.AspNet.Identity.Samples one (you may need to enable Prerelease packages in Nuget to find it). &lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_Add_Identity_Samples_Nuget.png&quot; alt=&quot;Adding Microsoft.AspNet.Identity.Samples&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;This will add all the boilerplate and scaffolding for logging in and managing users. We’ll just let it use the built-in LocalDB for now, but let’s revisit that in a later blog post.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_Add_Identity_Samples.png&quot; alt=&quot;Lots of stuff being added&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Let’s run it and make sure we can register and log in.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_First_Run.png&quot; alt=&quot;Sheetrock First Run&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Exxxcellent. Now let’s register, just to make sure it all works. I’ll use my email address and super-secret password.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_Cbsmith_Register.png&quot; alt=&quot;Registering myself&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;And as you can see, it’s going to require an email confirmation. Just another one of the nice things we get for free with ASP.NET Identity.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_Cbsmith_Confirm.png&quot; alt=&quot;Confirm account page&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Since I haven’t set up a SMTP server for it to send from, it’s just going to give me a confirmation link. We’ll need to fix this for a production system, but let’s keep going. I’ll just click on that link to confirm my account.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_Cbsmith_Confirmed.png&quot; alt=&quot;Account confirmed&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Let’s explore this app a little from an admin’s perspective. By default, it creates an admin@admin.com user with a password of “Admin@123456” so you can bootstrap yourself to admin status. Let’s peek around at the various screens.&lt;/p&gt;
+
+&lt;p&gt;Users list&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_Users_List.png&quot; alt=&quot;Sheetrock Users List&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Roles (there’s only one for now)&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_Roles_List.png&quot; alt=&quot;Sheetrock Roles List&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;User Detail&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_User_Details.png&quot; alt=&quot;Admin user details&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Nice. It’s not perfect, but it’s not supposed to be. We can build on this.&lt;/p&gt;
+
+&lt;p&gt;So, now we can log in on the web and do some basic user management, but that’s not really much of a replacement for Auth0. How do I get a JWT token? And what do I do with it?&lt;/p&gt;
+
+&lt;p&gt;What we’ll need is a controller action that generates the token from the currently logged in user. I’ll use John Sheehan’s aptly named JWT Nuget package for that. &lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_Add_JWT.png&quot; alt=&quot;JWT Nuget package&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;And now add the following to our AccountController.cs file:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;```csharp
+[Authorize]
+public ActionResult Token()
+{
+	var sha256 = new SHA256Managed();
+	var secretBytes = System.Text.Encoding.UTF8.GetBytes(&quot;seeeeectretz&quot; + &quot;JWTSig&quot;);
+	byte[] signingKey = sha256.ComputeHash(secretBytes);
+
+	var issueTime = DateTime.Now;
+	var utc0 = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
+	var exp = (int)issueTime.AddDays(30).Subtract(utc0).TotalSeconds;
+
+	Dictionary&amp;lt;string, object&amp;gt; claims = new Dictionary&amp;lt;string, object&amp;gt;()
+	{
+		{ &quot;iss&quot;, &quot;urn:microsoft:windows-azure:zumo&quot;},
+		{ &quot;aud&quot;, &quot;urn:microsoft:windows-azure:zumo&quot;},
+		{ &quot;uid&quot;, User.Identity.GetUserId()},
+		{ &quot;exp&quot;, exp },
+		{ &quot;ver&quot;, &quot;2&quot;}
+	};
+
+	return RedirectToAction(&quot;Success&quot;, new { token = JWT.JsonWebToken.Encode(claims, signingKey, JWT.JwtHashAlgorithm.HS256) });
+}
+
+public ActionResult Success()
+{
+	return View();
+}
+```
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;OK, so there’s a lot going on here. Let’s step through it.&lt;/p&gt;
+
+&lt;p&gt;First notice that I’ve marked the Token action with an [Authorize] attribute. That way someone has to log in first before they can get a token, duh! This also has a nice side effect that I’ll show you in a minute.&lt;/p&gt;
+
+&lt;p&gt;After that, we’re going to create a hash of the master key (“seeeeectretz”). Why did I just concatenate two string constants there? Mostly so I could swap out the hard-coded key while I was testing. We’ll rectify that little bit of ugliness later and make the key configurable. Right now let’s just keep moving.&lt;/p&gt;
+
+&lt;p&gt;Next, we calculate an expiration time for the token. In this example, we’ll make it expire in 30 days.&lt;/p&gt;
+
+&lt;p&gt;Since a JWT token is just a collection of key/value pairs that make up claims, we’ll populate a Dictionary with the claims we need to have to authenticate. Those first two items are the “Issuer” (“iss”) and “Audience” (“aud”) claims. What’s with the “microsoft:windows-azure:zumo” stuff? That’ll come in when we connect to AMS :)&lt;/p&gt;
+
+&lt;p&gt;Then we add the user’s ID (“uid”) with the currently logged in user, the expiration date of the token (“exp”) and the version (“ver”) of 2. Again, AMS is the reason for including the version of 2.&lt;/p&gt;
+
+&lt;p&gt;Finally, we redirect to the “Success” action, adding the encoded token as a query string value.&lt;/p&gt;
+
+&lt;p&gt;In the Success action, we simply return a View, which you’ll need to add. Let’s add a View under the Views/Account folder called (you guessed it) “Success.cshtml”:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;```csharp
+@@{
+	ViewBag.Title = &quot;Success&quot;;
+}
+
+&amp;lt;h2&amp;gt;Login successful!&amp;lt;/h2&amp;gt;
+```
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Yep, all it does it says “Login successful”, but it’s important for the next part of our little test.&lt;/p&gt;
+
+&lt;p&gt;Let’s go ahead and run it and see what happens. Try going to http://localhost:&amp;lt;port&amp;gt;/Account/Token URL.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_Token_Url_Not_LoggedIn.png&quot; alt=&quot;Sheetrock Token Url&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;If you had already logged in to the site, it should take you directly to the Success action and you should see the token in the query string, like this:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_Success_Token.png&quot; alt=&quot;Sheetrock Token Success&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;If not, you should be redirected to the login page:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_Login_ReturnUrl_Token.png&quot; alt=&quot;Sheetrock Token Login&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Notice how the return URL is /Account/Token? That will automatically send the user to the token handler once they successfully log in. This way, in our app, we just send them to /Account/Token and if they’re not logged in, it’ll prompt for credentials. If not (or, importantly, if they’ve checked “Remember me”), it’ll go directly to the Success page with the token!&lt;/p&gt;
+
+&lt;p&gt;OK, so we have a token. Wonderful. What do I do with it? Well, let’s try doing a round trip and authenticating to ourselves first. To do that, we’ll need to head to Nuget again and grab another nice Microsoft package called Microsoft.Owin.Security.Jwt.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_OWIN_JWT_Nuget.png&quot; alt=&quot;Adding Microsoft.Owin.Security.Jwt&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;OK, cool. Now, let’s look in the App_Start/Startup.Auth.cs. As you can see, it’s already set up to check for cookies to authenticate:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_VS2013_StartupAuth.png&quot; alt=&quot;Startup.Auth cookie handler code&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;It’s actually as simple as adding a JWT handler. Put this right above that cookie code:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;```csharp
+var sha256 = new SHA256Managed();
+var secretBytes = System.Text.Encoding.UTF8.GetBytes(&quot;seeeeectretz&quot; + &quot;JWTSig&quot;);
+byte[] signingKey = sha256.ComputeHash(secretBytes);
+
+app.UseJwtBearerAuthentication(
+	new JwtBearerAuthenticationOptions
+	{
+		AuthenticationMode = Microsoft.Owin.Security.AuthenticationMode.Active,
+		AllowedAudiences = new[] { &quot;urn:microsoft:windows-azure:zumo&quot; },
+		IssuerSecurityTokenProviders =
+			new[]
+		{
+		    new SymmetricKeyIssuerSecurityTokenProvider(&quot;urn:microsoft:windows-azure:zumo&quot;, signingKey)
+		}
+});
+```
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Notice that there’s some repetitive code there :) Let’s go through this one too.&lt;/p&gt;
+
+&lt;p&gt;First, we create the same signing key as the Token action. Again, we’ll fix this later. Then, we call the UseJwtBearerAuthentication extension method on the app. That will tell the OWIN pipeline to look for JWT bearer tokens. Notice that we do keep the cookie code, though, so we’ll be able to use either method to log in.&lt;/p&gt;
+
+&lt;p&gt;AuthenticationMode tells it whether it can modify the response if the token is invalid, or whether the rest of the app will handle it. Basically, we’re telling it that we want the JWT module to handle 401s.&lt;/p&gt;
+
+&lt;p&gt;Then we tell it which audiences we will accept in the token. We’ll use that goofy AMS one again, but we could also add our own if we needed to differentiate. And finally, we’ll tell it to use a SymmetricKeyIssuerSecurityTokenProvider to decode the token, giving the issuer name (again, same as AMS) and the signing key.&lt;/p&gt;
+
+&lt;p&gt;So, to test that this works, let’s add a simple Web API to this and see if it’ll take a token instead of a cookie. First, add a Web API v2 controller called TestApiController.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_Add_TestApiController.png&quot; alt=&quot;Adding a test Web API controller&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Then, since we started with an empty ASP.NET app, it doesn’t have the scaffolding for Web API controller routing, so we’ll need to add it. Create a file called WebApiConfig.cs under App_Start and put the following in it:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;```csharp
+using System.Web.Http;
+
+namespace Sheetrock.App_Start
+{
+	public static class WebApiConfig
+	{
+		public static void Register(HttpConfiguration config)
+		{
+			// Web API configuration and services
+
+			// Web API routes
+			config.MapHttpAttributeRoutes();
+
+			config.Routes.MapHttpRoute(
+				name: &quot;DefaultApi&quot;,
+				routeTemplate: &quot;api/{controller}/{id}&quot;,
+				defaults: new { id = RouteParameter.Optional }
+			);
+		}
+	}
+}
+```
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Now we also need to modify the Global.asax.cs to call it:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;```csharp
+AreaRegistration.RegisterAllAreas();
+GlobalConfiguration.Configure(WebApiConfig.Register);
+FilterConfig.RegisterGlobalFilters(GlobalFilters.Filters);
+RouteConfig.RegisterRoutes(RouteTable.Routes);
+BundleConfig.RegisterBundles(BundleTable.Bundles);
+```
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;And finally, let’s just keep the basic Web API, but add an Authorize attribute to the Get action:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;```csharp
+// GET api/&amp;lt;controller&amp;gt;
+[Authorize]
+public IEnumerable&amp;lt;string&amp;gt; Get()
+{
+	return new string[] { &quot;value1&quot;, &quot;value2&quot; };
+}
+```
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;This is just a simple test, but it should validate that we’re accepting tokens. To pass JWTs in via an HTTP call, the standard is to create an HTTP header with the Authorization attribute that looks like this:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;Authorization: Bearer &amp;lt;token goes here&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;The easiest way to do this is to use Fiddler to manually create a request to our local site with that header:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_Fiddler_Added_Header.png&quot; alt=&quot;Fiddler with Authorization Bearer header&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Click Execute and…&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_API_Test_Success.png&quot; alt=&quot;Fiddler with Authorization Bearer header response&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Woohoo! So, if we add the Authorization header, the OWIN pipeline will process it and automatically turn it into an authenticated user! And all we had to do was add some code in the Startup.Auth and an Authorize attribute on our actions. Sweet!&lt;/p&gt;
+
+&lt;h2 id=&quot;cleaning-up&quot;&gt;Cleaning Up&lt;/h2&gt;
+&lt;p&gt;Alright, so hard-coding the key in the code is going to make my coder OCD go crazy, so let’s fix that before we go any further.&lt;/p&gt;
+
+&lt;p&gt;I’d really like to put my master key in the Web.config and load it from one place. Let’s create a static class called JwtMasterKeyManager in App_Code to handle that for us:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;```csharp
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Web;
+using System.Web.Configuration;
+
+namespace Sheetrock
+{
+	public static class JwtMasterKeyManager
+	{
+		public static byte[] GetEncodedMasterKey()
+		{
+			var sha256 = new SHA256Managed();
+			var secretBytes = System.Text.Encoding.UTF8.GetBytes(WebConfigurationManager.AppSettings[&quot;MasterKey&quot;] + &quot;JWTSig&quot;);
+			byte[] signingKey = sha256.ComputeHash(secretBytes);
+
+			return signingKey;
+		}
+	}
+}
+```
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Now in Startup.Auth, replace the part we added earlier with this:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;```csharp
+app.UseJwtBearerAuthentication(
+	new JwtBearerAuthenticationOptions
+	{
+		AuthenticationMode = Microsoft.Owin.Security.AuthenticationMode.Active,
+		AllowedAudiences = new[] { &quot;urn:microsoft:windows-azure:zumo&quot; },
+		IssuerSecurityTokenProviders =
+			new[]
+		{
+		    new SymmetricKeyIssuerSecurityTokenProvider(&quot;urn:microsoft:windows-azure:zumo&quot;, Sheetrock.JwtMasterKeyManager.GetEncodedMasterKey())
+		}
+});
+```
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;And our Token action:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;```csharp
+[Authorize]
+public ActionResult Token()
+{
+	var issueTime = DateTime.Now;
+	var utc0 = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
+	var exp = (int)issueTime.AddDays(30).Subtract(utc0).TotalSeconds;
+	var nbf = (int)issueTime.AddDays(-1).Subtract(utc0).TotalSeconds;
+
+	Dictionary&amp;lt;string, object&amp;gt; claims = new Dictionary&amp;lt;string, object&amp;gt;()
+	{
+		{ &quot;iss&quot;, &quot;urn:microsoft:windows-azure:zumo&quot;},
+		{ &quot;aud&quot;, &quot;urn:microsoft:windows-azure:zumo&quot;},
+		{ &quot;uid&quot;, User.Identity.GetUserId()},
+		{ &quot;exp&quot;, exp },
+		{ &quot;ver&quot;, &quot;2&quot;}
+	};
+
+	return RedirectToAction(&quot;Success&quot;, new { token = JWT.JsonWebToken.Encode(claims, Sheetrock.JwtMasterKeyManager.GetEncodedMasterKey(), JWT.JwtHashAlgorithm.HS256) });
+}
+```
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Ahh, much cleaner. Now let’s add our “seeeeecretz” token to the web.config:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;```xml
+&amp;lt;appSettings&amp;gt;
+	&amp;lt;add key=&quot;owin:AppStartup&quot; value=&quot;IdentitySample.Startup,Sheetrock&quot; /&amp;gt;
+	&amp;lt;add key=&quot;webpages:Version&quot; value=&quot;3.0.0.0&quot; /&amp;gt;
+	&amp;lt;add key=&quot;webpages:Enabled&quot; value=&quot;false&quot; /&amp;gt;
+	&amp;lt;add key=&quot;ClientValidationEnabled&quot; value=&quot;true&quot; /&amp;gt;
+	&amp;lt;add key=&quot;UnobtrusiveJavaScriptEnabled&quot; value=&quot;true&quot; /&amp;gt;
+	&amp;lt;add key=&quot;MasterKey&quot; value=&quot;seeeeekretz&quot; /&amp;gt;
+&amp;lt;/appSettings&amp;gt;
+```
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h2 id=&quot;azure-mobile-services&quot;&gt;Azure Mobile Services&lt;/h2&gt;
+&lt;p&gt;OK, so I’ve been dangling this over your head up to this point. We can authenticate to the API on our little website here which is all fine and dandy, but what if we want to authenticate to AMS? Maybe I want to have my API there too for some stuff, right?&lt;/p&gt;
+
+&lt;p&gt;Well, since we added those “zumo” claims, it’s actually pretty easy! Let’s take it step by step.&lt;/p&gt;
+
+&lt;p&gt;First, if you haven’t already, go ahead and create a new Mobile Service in your Azure portal.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_Azure_Dashboard.png&quot; alt=&quot;Creating an Azure Mobile Service&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Next, let’s create a simple table API. I called mine “posts”.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_Azure_Add_Table.png&quot; alt=&quot;Adding a table called &amp;quot;posts&amp;quot; in the Azure dashboard&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;(Notice how I set it so that only authenticated users can write to the table)&lt;/p&gt;
+
+&lt;p&gt;Let’s modify the Insert handler to add the user’s ID to the item that’s posted:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_Azure_Table_Script.png&quot; alt=&quot;Modifying the table script to handle inserts&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Now, go back to the dashboard for the mobile service, and down at the bottom click on the Manage Keys button. You should get a window showing you your Application Key and your Master Key. Click the Copy button to copy the Master Key to your clipboard. &lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_Azure_Access_Keys.png&quot; alt=&quot;Azure Mobile Services keys&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;If you’re quick, you’ll see where this is headed. Just replace “seeeeekretz” in the Web.config with the AMS master key:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;```xml
+&amp;lt;appSettings&amp;gt;
+	&amp;lt;add key=&quot;owin:AppStartup&quot; value=&quot;IdentitySample.Startup,Sheetrock&quot; /&amp;gt;
+	&amp;lt;add key=&quot;webpages:Version&quot; value=&quot;3.0.0.0&quot; /&amp;gt;
+	&amp;lt;add key=&quot;webpages:Enabled&quot; value=&quot;false&quot; /&amp;gt;
+	&amp;lt;add key=&quot;ClientValidationEnabled&quot; value=&quot;true&quot; /&amp;gt;
+	&amp;lt;add key=&quot;UnobtrusiveJavaScriptEnabled&quot; value=&quot;true&quot; /&amp;gt;
+	&amp;lt;add key=&quot;MasterKey&quot; value=&quot;&amp;lt;Master Key Goes Here&amp;gt;&quot; /&amp;gt;
+&amp;lt;/appSettings&amp;gt;
+```
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Let’s go back to Fiddler again, but this time we’re going to do the HTTP headers a little differently:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_Fiddler_Added_AMS.png&quot; alt=&quot;Fiddler with header for Azure Mobile Services&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Notice how instead of “Authorization: Bearer …”, I added a “X-ZUMO-AUTH” header with the token instead. Can anyone guess what the code name for AMS was? :) Now, for the URL, it’s just https:&amp;lt;servicename&amp;gt;.azure-mobile.net/tables/&amp;lt;table name&amp;gt;. We’ll do a POST to that URL with some simple JSON that just has a Title and Body properties. Hit Execute and…&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_Fiddler_AMS_Response.png&quot; alt=&quot;Fiddler with successful response from Azure Mobile Services&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Success! AMS has accepted our token since we used the same Master Key. Now let’s go look at the data in the portal…&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_Azure_Table_Data.png&quot; alt=&quot;Azure dashboard showing Mobile Services data we inserted&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Well, look at that. The CreatedBy column has a GUID in it. And that GUID…&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000//assets/Lets-make-an-Auth0-clone-with-aspnet-identity/Sheetrock_VS2013_User_Data.png&quot; alt=&quot;Visual Studio 2013 data explorer showing our users table&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Yep, it’s the user ID from our website’s user table! So we logged in to one place and a completely separate service authenticated us. Not bad for a few minutes’ work (or less), eh?&lt;/p&gt;
+
+&lt;h2 id=&quot;summing-up&quot;&gt;Summing Up&lt;/h2&gt;
+&lt;p&gt;So, let’s see what we’ve accomplished here:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Created a basic website with username/password authentication, password reset, roles, user management, etc.&lt;/li&gt;
+  &lt;li&gt;Created an action to generate JWT tokens&lt;/li&gt;
+  &lt;li&gt;Set up our website so that APIs can be authenticated with said tokens&lt;/li&gt;
+  &lt;li&gt;Set up Azure Mobile Services to accept our tokens as well&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;We’re definitely not done here, though. I’ve posted the code so far on Github (&lt;a href=&quot;https://github.com/cbsmith402/sheetrock&quot;&gt;https://github.com/cbsmith402/sheetrock&lt;/a&gt;) so you can try it out yourself. In future posts I’ll be setting up multi-factor auth, a mobile login component and social providers. Until then, I accept pull requests!&lt;/p&gt;
+</description>
+        <pubDate>Mon, 28 Apr 2014 08:00:00 -0400</pubDate>
+        <link>http://localhost:4000//blog/aspnet/jwt/authentication/sheetrock/2014/04/28/lets-make-an-auth0-clone.html</link>
+        <guid isPermaLink="true">http://localhost:4000//blog/aspnet/jwt/authentication/sheetrock/2014/04/28/lets-make-an-auth0-clone.html</guid>
+        
+        
+        <category>aspnet</category>
+        
+        <category>jwt</category>
+        
+        <category>authentication</category>
+        
+        <category>sheetrock</category>
+        
+      </item>
+    
+  </channel>
+</rss>
